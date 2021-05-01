@@ -64,17 +64,15 @@ class SSCalculate:
         if len(data_A.shape) <= 1:
             data_A = data_A.reshape(-1, 1)
             data_B = data_B.reshape(-1, 1)
-        iter = 15
-        factor = 1
+        iter = 20
         if rank == 0: # Send shared data
             divisor_list = []
             for i in range(1, clientNum + 1):
                 divisor_list.append(comm.recv(source=i))
             divisor_list = np.array(divisor_list)
-            divisor = np.min(divisor_list, axis=0)
+            divisor = np.min(divisor_list, axis=0) / 10
             divisor /= clientNum # Equally share the divisor to parties.
-            divisor *= factor # Set a proper factor to speed-up the convergence.
-            divisor = divisor / np.ceil(clientNum / 2)
+            # divisor = divisor / np.ceil(clientNum / 2)
             for i in range(1, clientNum + 1):
                 comm.send(divisor, dest=i)
             for i in range(iter):
@@ -317,7 +315,7 @@ class SSCalculate:
         return row_index_list[0], row_idx_dict[row_index_list[0]]  # Return feature and split position
 
     # Implement the Fisrt-tree trick from Kewei Cheng's paper.
-    def SARGMAX_ver3(self, gain_left_up, gain_left_down, gain_right_up, gain_right_down, rank, tree_num, leagal_featureList):
+    def SARGMAX_ver3(self, gain_left_up, gain_left_down, gain_right_up, gain_right_down, rank, tree_num, legal_featureList):
         new_col_index_list = None
         new_row_index_list = None
         row_idx_dict = {}
@@ -326,7 +324,7 @@ class SSCalculate:
         for k in range(row_num):
             if tree_num == 0: # The first tree.
                 if rank == 1: # The first party who holds labels.
-                    if k not in leagal_featureList:
+                    if k not in legal_featureList:
                         permission = False
                     else:
                         permission = True
@@ -654,37 +652,55 @@ class SSCalculate:
         sign = comm.bcast(sign, root=1)
         return sign
 
-    def S_GD(self, a, b, rank, iter, lamb):
+    def S_GD(self, a, b, rank, lamb):
         temp_a = 0
         shared_step = 0
-        coef = 3
+        coef = 2
         m = coef * lamb
+        iter = 0
         if rank != 0:
             temp_a = a.copy() + np.random.uniform(0.1*m, m) * 0.5
             if rank != 1:
                 comm.send(temp_a, dest=1)
+        # if rank == 1:
+        #     for i in range(2, clientNum + 1):
+        #         temp_a += comm.recv(source=i)
+        #     shared_step = np.array(1 / (2 * temp_a)).reshape(-1, 1)
+        #     if temp_a >= 2 * clientNum * m:
+        #         max_step = math.log(1e-14, math.e)
+        #         worst_case = math.log(0.5, math.e)
+        #         iter = max_step / worst_case
+        #         z = temp_a / (clientNum * m)
+        #         iter *= worst_case / math.log(1 / z, math.e)
+        #         iter = int(np.ceil(iter))
+        #     else:
+        #         max_step = math.log(1e-14, math.e)
+        #         z = temp_a / (clientNum * m)
+        #         worst_case = math.log(1 - (z * coef - 1) / (z * coef))
+        #         worst_case_iter = int(np.ceil(max_step / worst_case))
+        #         if z <= 1:
+        #             iter = worst_case_iter
+        #         else:
+        #             step1 = worst_case_iter
+        #             step2 = int(np.ceil(max_step / math.log(1 / z, math.e)))
+        #             iter = min(step1, step2)
         if rank == 1:
             for i in range(2, clientNum + 1):
                 temp_a += comm.recv(source=i)
             shared_step = np.array(1 / (2 * temp_a)).reshape(-1, 1)
-            if temp_a >= 2 * clientNum * m:
+            if temp_a <= clientNum * m:
                 max_step = math.log(1e-14, math.e)
-                worst_case = math.log(0.5, math.e)
-                iter = max_step / worst_case
                 z = temp_a / (clientNum * m)
-                iter *= worst_case / math.log(1 / z, math.e)
+                iter = max_step / math.log((z * coef - 1) / (z * coef), math.e)
                 iter = int(np.ceil(iter))
             else:
                 max_step = math.log(1e-14, math.e)
                 z = temp_a / (clientNum * m)
-                worst_case = math.log(1 - (z * coef - 1) / (z * coef))
-                worst_case_iter = int(np.ceil(max_step / worst_case))
-                if z <= 1:
-                    iter = worst_case_iter
-                else:
-                    step1 = worst_case_iter
-                    step2 = int(np.ceil(max_step / math.log(1 / z, math.e)))
-                    iter = min(step1, step2)
+                iter1 = max_step / math.log((z * coef - 1) / (z * coef), math.e)
+                iter2 = max_step / math.log(1 / z, math.e)
+                iter1 = int(np.ceil(iter1))
+                iter2 = int(np.ceil(iter2))
+                iter = min(iter1, iter2)
 
 
         eta = comm.bcast(shared_step, root=1)

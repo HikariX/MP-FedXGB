@@ -383,7 +383,7 @@ class VerticalXGBoostTree:
             a *= 0.5
             b = shared_gsum
             b = b.reshape(-1, 1)
-            value = self.split.S_GD(a, b, self.rank, iter=iter, lamb=self._lambda)
+            value = self.split.S_GD(a, b, self.rank, lamb=self._lambda)
             return Tree(result=value)
 
         currentRank = None
@@ -410,8 +410,8 @@ class VerticalXGBoostTree:
             gain_right_down[j, :] = shared_hsum_R + self._lambda
 
         # First-Layer-Mask
-        # j_best, k_best = self.split.SARGMAX_ver4(gain_left_up, gain_left_down, gain_right_up, gain_right_down,
-        #                                          self.rank, depth, self.featureList)
+        j_best, k_best = self.split.SARGMAX_ver4(gain_left_up, gain_left_down, gain_right_up, gain_right_down,
+                                                 self.rank, depth, self.featureList)
 
         # Original
         # j_best, k_best = self.split.SARGMAX_ver2(gain_left_up, gain_left_down, gain_right_up, gain_right_down,
@@ -469,7 +469,7 @@ class VerticalXGBoostTree:
             a *= 0.5
             b = shared_gsum
             b = b.reshape(-1, 1)
-            value = self.split.S_GD(a, b, self.rank, iter=iter, lamb=self._lambda)
+            value = self.split.S_GD(a, b, self.rank, lamb=self._lambda)
             return Tree(result=value)
 
     # This function contains no communication operation.
@@ -543,8 +543,8 @@ class VerticalXGBoostTree:
         shared_S = comm.scatter(shared_S, root=1)
 
 
-        # self.Tree = self.buildTree_ver4(shared_G, shared_H, shared_S)
-        self.Tree = self.buildTree_ver3(shared_G, shared_H, shared_S, depth=1, tree_num=tree_num)
+        self.Tree = self.buildTree_ver4(shared_G, shared_H, shared_S)
+        # self.Tree = self.buildTree_ver3(shared_G, shared_H, shared_S, depth=1, tree_num=tree_num)
         # self.Tree = self.buildTree_ver2(shared_G, shared_H, shared_S)
         # self.Tree = self.buildTree(shared_G, shared_H, shared_S)
 

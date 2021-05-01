@@ -398,6 +398,6 @@ def main3():
         #     print(y_test[i], y_pred[i])
 
 if __name__ == '__main__':
-    main2()
+    main1()
 
 
