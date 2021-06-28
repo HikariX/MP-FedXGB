@@ -662,32 +662,11 @@ class SSCalculate:
             temp_a = a.copy() + np.random.uniform(0.1*m, m) * 0.5
             if rank != 1:
                 comm.send(temp_a, dest=1)
-        # if rank == 1:
-        #     for i in range(2, clientNum + 1):
-        #         temp_a += comm.recv(source=i)
-        #     shared_step = np.array(1 / (2 * temp_a)).reshape(-1, 1)
-        #     if temp_a >= 2 * clientNum * m:
-        #         max_step = math.log(1e-14, math.e)
-        #         worst_case = math.log(0.5, math.e)
-        #         iter = max_step / worst_case
-        #         z = temp_a / (clientNum * m)
-        #         iter *= worst_case / math.log(1 / z, math.e)
-        #         iter = int(np.ceil(iter))
-        #     else:
-        #         max_step = math.log(1e-14, math.e)
-        #         z = temp_a / (clientNum * m)
-        #         worst_case = math.log(1 - (z * coef - 1) / (z * coef))
-        #         worst_case_iter = int(np.ceil(max_step / worst_case))
-        #         if z <= 1:
-        #             iter = worst_case_iter
-        #         else:
-        #             step1 = worst_case_iter
-        #             step2 = int(np.ceil(max_step / math.log(1 / z, math.e)))
-        #             iter = min(step1, step2)
         if rank == 1:
             for i in range(2, clientNum + 1):
                 temp_a += comm.recv(source=i)
-            shared_step = np.array(1 / (2 * temp_a)).reshape(-1, 1)
+            temp_a *= 2 # The a is transmitted as a/2 from each client, we must restore it first.
+            shared_step = np.array(1 / temp_a).reshape(-1, 1)
             if temp_a <= clientNum * m:
                 max_step = math.log(1e-14, math.e)
                 z = temp_a / (clientNum * m)
