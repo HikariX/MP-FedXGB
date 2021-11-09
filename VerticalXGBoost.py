@@ -106,7 +106,7 @@ class VerticalXGBoostClassifier:
             maxlen = max(recv_maxlen)
 
         self.maxSplitNum = comm.bcast(maxlen, root=1)
-        print('MaxSplitNum: ', self.maxSplitNum)
+        # print('MaxSplitNum: ', self.maxSplitNum)
         self.quantile = dict
 
     def fit(self, X, y):
@@ -116,16 +116,17 @@ class VerticalXGBoostClassifier:
         self.data = X.copy()
         self.getAllQuantile()
         for i in range(self.n_estimators):
-            print('In classifier fit, rank: ', self.rank)
+            # print('In classifier fit, rank: ', self.rank)
             tree = self.trees[i]
             tree.data, tree.maxSplitNum, tree.quantile = self.data, self.maxSplitNum, self.quantile
             y_and_pred = np.concatenate((y, y_pred), axis=1)
             tree.fit(y_and_pred, i)
             if i == self.n_estimators - 1: # The last tree, no need for prediction update.
-                pass
+                continue
             else:
                 update_pred = tree.predict(X)
             if self.rank == 1:
+                # print('test')
                 update_pred = np.reshape(update_pred, (data_num, 1))
                 y_pred += update_pred
 
@@ -205,8 +206,8 @@ def main1():
         y_pred[y_pred <= 0.5] = 0
         result = y_pred - y_test
         print(np.sum(result == 0) / y_pred.shape[0])
-        for i in range(y_test.shape[0]):
-            print(y_test[i], y_pred[i], y_ori[i])
+        # for i in range(y_test.shape[0]):
+        #     print(y_test[i], y_pred[i], y_ori[i])
 
 def main2():
     data = pd.read_csv('./GiveMeSomeCredit/cs-training.csv')
@@ -217,12 +218,13 @@ def main2():
        'NumberOfOpenCreditLinesAndLoans', 'NumberOfTimes90DaysLate',
        'NumberRealEstateLoansOrLines', 'NumberOfTime60-89DaysPastDueNotWorse',
        'NumberOfDependents']].values
+    ori_data = data.copy()
     # Add features
-    # for i in range(99):
+    # for i in range(1):
     #     data = np.concatenate((data, ori_data[:, 1:]), axis=1)
     data = data / data.max(axis=0)
 
-    ratio = 30000 / data.shape[0]
+    ratio = 10000 / data.shape[0]
 
 
     zero_index = data[:, 0] == 0
@@ -241,19 +243,17 @@ def main2():
                       np.concatenate((zero_data[train_size_zero:train_size_zero+int(num * zero_ratio)+1, 0].reshape(-1, 1),
                                       one_data[train_size_one:train_size_one+int(num * one_ratio), 0].reshape(-1, 1)), 0)
 
-    segment_A = int(0.1*(data.shape[1] - 1))
-    segment_B = segment_A + int(0.2*(data.shape[1] - 1))
-    segment_C = segment_B + int(0.3*(data.shape[1] - 1))
-    X_train_A = X_train[:, 0:segment_A]
-    X_train_B = X_train[:, segment_A:segment_B]
-    X_train_C = X_train[:, segment_B:segment_C]
-    X_train_D = X_train[:, segment_C:]
-    X_test_A = X_test[:, :segment_A]
-    X_test_B = X_test[:, segment_A:segment_B]
-    X_test_C = X_test[:, segment_B:segment_C]
-    X_test_D = X_test[:, segment_C:]
+    X_train_A = X_train[:, :2]
+    X_train_B = X_train[:, 2:4]
+    X_train_C = X_train[:, 4:7]
+    X_train_D = X_train[:, 7:]
+    X_test_A = X_test[:, :2]
+    X_test_B = X_test[:, 2:4]
+    X_test_C = X_test[:, 4:7]
+    X_test_D = X_test[:, 7:]
+
     splitclass = SSCalculate()
-    model = VerticalXGBoostClassifier(rank=rank, lossfunc='LogLoss', splitclass=splitclass)
+    model = VerticalXGBoostClassifier(rank=rank, lossfunc='LogLoss', splitclass=splitclass, max_depth=3, n_estimators=3, _epsilon=0.1)
 
     start = datetime.now()
     if rank == 1:
@@ -261,13 +261,15 @@ def main2():
         end = datetime.now()
         print('In fitting 1: ', end - start)
         time = end - start
-        for i in range(5):
+        for i in range(clientNum + 1):
             if i == 1:
                 pass
             else:
                 time += comm.recv(source=i)
-        print(time / 5)
+        print(time / (clientNum + 1))
+        final_time = time / (clientNum + 1)
         print('end 1')
+        print(final_time)
     elif rank == 2:
         model.fit(X_train_B, np.zeros_like(y_train))
         end = datetime.now()
@@ -329,8 +331,7 @@ def main3():
 
     train_size_zero = int(zero_data.shape[0] * ratio) + 1
     train_size_one = int(one_data.shape[0] * ratio)
-    print(train_size_one)
-    print(train_size_zero)
+
     X_train, X_test = np.concatenate((zero_data[:train_size_zero, 1:], one_data[:train_size_one, 1:]), 0), \
                       np.concatenate((zero_data[train_size_zero:, 1:], one_data[train_size_one:, 1:]), 0)
     y_train, y_test = np.concatenate(
@@ -338,12 +339,10 @@ def main3():
                       np.concatenate((zero_data[train_size_zero:, 0].reshape(-1, 1),
                                       one_data[train_size_one:, 0].reshape(-1, 1)), 0)
 
-    print(y_test.shape)
-    print(X_train.shape)
-    segment_A = int(0.1 * (data.shape[1] - 1))
+    segment_A = int(0.2 * (data.shape[1] - 1))
     segment_B = segment_A + int(0.2 * (data.shape[1] - 1))
     segment_C = segment_B + int(0.3 * (data.shape[1] - 1))
-    print(segment_A, segment_B, segment_C)
+
     X_train_A = X_train[:, 0:segment_A]
     X_train_B = X_train[:, segment_A:segment_B]
     X_train_C = X_train[:, segment_B:segment_C]
@@ -352,8 +351,9 @@ def main3():
     X_test_B = X_test[:, segment_A:segment_B]
     X_test_C = X_test[:, segment_B:segment_C]
     X_test_D = X_test[:, segment_C:]
+
     splitclass = SSCalculate()
-    model = VerticalXGBoostClassifier(rank=rank, lossfunc='LogLoss', splitclass=splitclass)
+    model = VerticalXGBoostClassifier(rank=rank, lossfunc='LogLoss', splitclass=splitclass, max_depth=3, n_estimators=3, _epsilon=0.1)
 
     if rank == 1:
         start = datetime.now()
@@ -397,7 +397,7 @@ def main3():
         # for i in range(y_test.shape[0]):
         #     print(y_test[i], y_pred[i])
 
-if __name__ == '__main__':
-    main1()
 
+if __name__ == '__main__':
+    main2()
 
