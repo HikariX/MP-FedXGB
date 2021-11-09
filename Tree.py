@@ -75,7 +75,6 @@ class VerticalXGBoostTree:
             bg_Matrix[j, :] = np.sum(self.split.SMUL(indexMatrix, np.tile(shared_G.copy(), (1, self.maxSplitNum)).T, self.rank), axis=1).T
             bh_Matrix[j, :] = np.sum(self.split.SMUL(indexMatrix, np.tile(shared_H.copy(), (1, self.maxSplitNum)).T, self.rank), axis=1).T
 
-
         return bg_Matrix, bh_Matrix
 
     # Implemented SARGMAX, but didn't rip out division.
@@ -253,12 +252,12 @@ class VerticalXGBoostTree:
             rightBranch = self.buildTree_ver2(shared_gr, shared_hr, shared_sr, depth + 1)
             if self.rank != 0:
                 if j_best in self.featureList:
-                    print(depth, rank)
+                    # print(depth, self.rank)
                     return Tree(value=self.quantile[self.featureIdxMapping[j_best]][k_best][1],
                                     leftBranch=leftBranch,
                                     rightBranch=rightBranch, col=j_best, isDummy=False)
                 else:
-                    print(depth, 'None', rank)
+                    # print(depth, 'None', self.rank)
                     return Tree(leftBranch=leftBranch, rightBranch=rightBranch, isDummy=True)  # Return a dummy node
             else:
                 return
@@ -409,14 +408,9 @@ class VerticalXGBoostTree:
             gain_right_up[j, :] = self.split.SMUL(shared_gsum_R, shared_gsum_R, self.rank).T
             gain_right_down[j, :] = shared_hsum_R + self._lambda
 
-        # First-Layer-Mask
-        j_best, k_best = self.split.SARGMAX_ver4(gain_left_up, gain_left_down, gain_right_up, gain_right_down,
-                                                 self.rank, depth, self.featureList)
-
         # Original
-        # j_best, k_best = self.split.SARGMAX_ver2(gain_left_up, gain_left_down, gain_right_up, gain_right_down,
-        #                                          self.rank)
-
+        j_best, k_best = self.split.SARGMAX_ver2(gain_left_up, gain_left_down, gain_right_up, gain_right_down,
+                                                 self.rank)
         if self.rank == 1:
             print(datetime.now() - start)
         gain_sign = self.split.SSIGN_ver2(gain_left_up[j_best, k_best], gain_left_down[j_best, k_best],
