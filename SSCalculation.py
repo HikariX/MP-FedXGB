@@ -109,14 +109,8 @@ class SSCalculate:
 
     # Implement ARGMAX by calculating SS division in build_tree.
     def SARGMAX(self, data, rank):
-        row_idx = None
-        col_idx = None
-        total_value_list = None
-        sign_list = None
-        col_index_list = None
         new_col_index_list = None
         new_row_index_list = None
-        row_index_list = None
         row_idx_dict = {}
         for k in range(data.shape[0]):
             ori_value_list = data[k, :]
@@ -619,8 +613,12 @@ class SSCalculate:
         if rank * rank > 1: # Select rank exclude 0 and 1
             comm.send(nominator, dest=1)
         elif rank == 1:
+            nominator_list = []
+            nominator_list.append(nominator)
             for i in range(2, clientNum + 1):
-                nominator += comm.recv(source=i)
+                nominator_list.append(comm.recv(source=i))
+                # nominator += comm.recv(source=i)
+            nominator = np.sum(nominator_list)
             if nominator > 0:
                 sign = 1
             elif nominator == 0:
@@ -631,11 +629,15 @@ class SSCalculate:
         if rank != 0 and rank != 2:
             comm.send(denominator, dest=2)
         elif rank == 2:
+            denominator_list = []
+            denominator_list.append(denominator)
             for i in range(1, clientNum + 1):
                 if i == 2:
                     pass
                 else:
-                    denominator += comm.recv(source=i)
+                    denominator_list.append(comm.recv(source=i))
+                    # denominator += comm.recv(source=i)
+            denominator = np.sum(denominator_list)
             if denominator > 0:
                 sign = 1
             elif denominator == 0:
@@ -662,9 +664,34 @@ class SSCalculate:
             temp_a = a.copy() + np.random.uniform(0.1*m, m) * 0.5
             if rank != 1:
                 comm.send(temp_a, dest=1)
+        # if rank == 1:
+        #     for i in range(2, clientNum + 1):
+        #         temp_a += comm.recv(source=i)
+        #     shared_step = np.array(1 / (2 * temp_a)).reshape(-1, 1)
+        #     if temp_a >= 2 * clientNum * m:
+        #         max_step = math.log(1e-14, math.e)
+        #         worst_case = math.log(0.5, math.e)
+        #         iter = max_step / worst_case
+        #         z = temp_a / (clientNum * m)
+        #         iter *= worst_case / math.log(1 / z, math.e)
+        #         iter = int(np.ceil(iter))
+        #     else:
+        #         max_step = math.log(1e-14, math.e)
+        #         z = temp_a / (clientNum * m)
+        #         worst_case = math.log(1 - (z * coef - 1) / (z * coef))
+        #         worst_case_iter = int(np.ceil(max_step / worst_case))
+        #         if z <= 1:
+        #             iter = worst_case_iter
+        #         else:
+        #             step1 = worst_case_iter
+        #             step2 = int(np.ceil(max_step / math.log(1 / z, math.e)))
+        #             iter = min(step1, step2)
         if rank == 1:
+            temp_a_list = []
+            temp_a_list.append(temp_a)
             for i in range(2, clientNum + 1):
-                temp_a += comm.recv(source=i)
+                temp_a_list.append(comm.recv(source=i))
+            temp_a = np.sum(temp_a_list)
             temp_a *= 2 # The a is transmitted as a/2 from each client, we must restore it first.
             shared_step = np.array(1 / temp_a).reshape(-1, 1)
             if temp_a <= clientNum * m:
@@ -680,6 +707,8 @@ class SSCalculate:
                 iter1 = int(np.ceil(iter1))
                 iter2 = int(np.ceil(iter2))
                 iter = min(iter1, iter2)
+
+            # print('*' * 20, iter)
 
 
         eta = comm.bcast(shared_step, root=1)
